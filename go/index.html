@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Opening your video</title>
+<style>
+  :root { --bg: #050506; --fg: #f2f0ea; --muted: #a8a49c; --accent: #f5b544; }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --bg: #f4f1ea; --fg: #141416; --muted: #6e6a64; --accent: #c77d0a; } }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--fg);
+         font: 500 1rem/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 16px; box-sizing: border-box; }
+  p { margin: 0; text-align: center; }
+  a { color: var(--accent); }
+  small { color: var(--muted); display: block; margin-top: 8px; }
+</style>
+</head>
+<body>
+<p>Opening your video…<small>If nothing happens, <a id="manual" href="#">click here</a>.</small></p>
+<!-- Delivery links: ?c=<who>&f=<Drive folder id> or &v=<Drive file id>.
+     Sends one event straight to PostHog's capture API (no SDK, so nothing is lost when the page moves on),
+     then redirects. Only Google Drive ids are accepted, so this can't be used as an open redirect. -->
+<script>
+  (function () {
+    var q = new URLSearchParams(location.search);
+    var f = q.get("f"), v = q.get("v"), ok = /^[\w-]{10,80}$/;
+    var to = f && ok.test(f) ? "https://drive.google.com/drive/folders/" + f
+           : v && ok.test(v) ? "https://drive.google.com/file/d/" + v + "/view" : null;
+    if (!to) return;
+    document.getElementById("manual").href = to;
+    var done = false;
+    function go() { if (!done) { done = true; location.replace(to); } }
+    var me = false;
+    try { me = !!localStorage.getItem("ph_me"); } catch (_) {}
+    if (me) return go();                                   // the owner's own clicks are never logged
+    var who = (q.get("c") || "unknown").toLowerCase();
+    var props = { who: who, lead: who, drive_target: to, site: "delivery", $current_url: location.href,
+                  $referrer: document.referrer || "$direct", $screen_width: screen.width, $screen_height: screen.height };
+    var body = JSON.stringify({ api_key: "phc_wk6S3CoeZhDaxnxWQZtdBgpAZS9rv9DnKnPfgnYznB35", batch: [
+      { event: "$pageview", distinct_id: who, properties: props },
+      { event: "delivery_opened", distinct_id: who, properties: props } ] });
+    try {
+      fetch("https://us.i.posthog.com/batch/", { method: "POST", body: body, keepalive: true,
+            headers: { "Content-Type": "application/json" } }).then(go, go);
+    } catch (_) { go(); }
+    setTimeout(go, 1500);                                  // never keep the client waiting
+  })();
+</script>
+</body>
+</html>
